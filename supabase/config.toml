@@ -1,1 +1,4 @@
 project_id = "gyvjjgatmkkvgsuqzfht"
+
+[functions.room-operations]
+verify_jwt = false

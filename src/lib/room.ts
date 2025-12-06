@@ -1,123 +1,122 @@
 import { supabase } from "@/integrations/supabase/client";
 
-// Generate a random 6-character room code
-export function generateRoomCode(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Removed confusing chars like 0, O, 1, I
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
+// Session token is now generated server-side and stored in sessionStorage
+const SESSION_TOKEN_KEY = 'roomSessionToken';
+const ROOM_CODE_KEY = 'roomCode';
+
+// Get stored session token for current room
+export function getSessionToken(): string | null {
+  return sessionStorage.getItem(SESSION_TOKEN_KEY);
 }
 
-// Generate a unique participant ID for this session
-export function generateParticipantId(): string {
-  return crypto.randomUUID();
+// Store session token
+export function setSessionToken(token: string): void {
+  sessionStorage.setItem(SESSION_TOKEN_KEY, token);
 }
 
-// Get or create participant ID from session storage
-export function getParticipantId(): string {
-  const stored = sessionStorage.getItem('participantId');
-  if (stored) return stored;
-  
-  const newId = generateParticipantId();
-  sessionStorage.setItem('participantId', newId);
-  return newId;
+// Clear session data
+export function clearSession(): void {
+  sessionStorage.removeItem(SESSION_TOKEN_KEY);
+  sessionStorage.removeItem(ROOM_CODE_KEY);
 }
 
-// Create a new room
+// Get stored room code
+export function getStoredRoomCode(): string | null {
+  return sessionStorage.getItem(ROOM_CODE_KEY);
+}
+
+// Store room code
+export function setStoredRoomCode(code: string): void {
+  sessionStorage.setItem(ROOM_CODE_KEY, code);
+}
+
+// Create a new room via edge function
 export async function createRoom(durationMinutes: number) {
-  const code = generateRoomCode();
-  const expiresAt = new Date(Date.now() + durationMinutes * 60 * 1000);
-
-  const { data, error } = await supabase
-    .from('rooms')
-    .insert({
-      code,
-      duration_minutes: durationMinutes,
-      expires_at: expiresAt.toISOString(),
-      status: 'waiting',
-      participant_count: 1,
-    })
-    .select()
-    .single();
+  const { data, error } = await supabase.functions.invoke('room-operations', {
+    body: {
+      action: 'create',
+      durationMinutes,
+    },
+  });
 
   if (error) {
     console.error('Error creating room:', error);
     throw error;
   }
 
-  return data;
+  if (data.error) {
+    throw new Error(data.error);
+  }
+
+  // Store the session token
+  setSessionToken(data.sessionToken);
+  setStoredRoomCode(data.room.code);
+
+  return data.room;
 }
 
-// Join an existing room by code
+// Join an existing room by code via edge function
 export async function joinRoom(code: string) {
-  // First, find the room
-  const { data: room, error: findError } = await supabase
-    .from('rooms')
-    .select()
-    .eq('code', code.toUpperCase())
-    .single();
-
-  if (findError || !room) {
-    return { error: 'Room not found' };
-  }
-
-  // Check if room is expired
-  if (new Date(room.expires_at) < new Date()) {
-    return { error: 'This room has expired' };
-  }
-
-  // Check room status
-  if (room.status === 'expired') {
-    return { error: 'This room is no longer available' };
-  }
-
-  if (room.status === 'active' && room.participant_count >= 2) {
-    return { error: 'This room is already full' };
-  }
-
-  // Update room to active status with 2 participants
-  const { data: updatedRoom, error: updateError } = await supabase
-    .from('rooms')
-    .update({
-      status: 'active',
-      participant_count: 2,
-    })
-    .eq('id', room.id)
-    .select()
-    .single();
-
-  if (updateError) {
-    console.error('Error joining room:', updateError);
-    return { error: 'Failed to join room' };
-  }
-
-  return { room: updatedRoom };
-}
-
-// Get room by code
-export async function getRoomByCode(code: string) {
-  const { data, error } = await supabase
-    .from('rooms')
-    .select()
-    .eq('code', code.toUpperCase())
-    .single();
+  const { data, error } = await supabase.functions.invoke('room-operations', {
+    body: {
+      action: 'join',
+      code: code.toUpperCase(),
+    },
+  });
 
   if (error) {
+    console.error('Error joining room:', error);
+    return { error: error.message || 'Failed to join room' };
+  }
+
+  if (data.error) {
+    return { error: data.error };
+  }
+
+  // Store the session token
+  setSessionToken(data.sessionToken);
+  setStoredRoomCode(data.room.code);
+
+  return { room: data.room };
+}
+
+// Get room by code (requires valid session token)
+export async function getRoomByCode(code: string) {
+  const sessionToken = getSessionToken();
+  
+  if (!sessionToken) {
     return null;
   }
 
-  return data;
+  const { data, error } = await supabase.functions.invoke('room-operations', {
+    body: {
+      action: 'get',
+      code: code.toUpperCase(),
+      sessionToken,
+    },
+  });
+
+  if (error || data?.error) {
+    return null;
+  }
+
+  return data.room;
 }
 
-// Send a message
+// Send a message (sender_id is now the session token for RLS validation)
 export async function sendMessage(roomId: string, content: string, senderId: string, type: 'text' | 'image' = 'text', imageUrl?: string) {
+  // Use the session token as sender_id for RLS validation
+  const sessionToken = getSessionToken();
+  
+  if (!sessionToken) {
+    throw new Error('No valid session. Please rejoin the room.');
+  }
+
   const { data, error } = await supabase
     .from('messages')
     .insert({
       room_id: roomId,
-      sender_id: senderId,
+      sender_id: sessionToken, // Use session token instead of client-generated ID
       content: type === 'text' ? content : null,
       image_url: type === 'image' ? imageUrl : null,
       message_type: type,
@@ -189,6 +188,9 @@ export async function expireRoom(roomId: string) {
   if (error) {
     console.error('Error expiring room:', error);
   }
+  
+  // Clear session on expiry
+  clearSession();
 }
 
 // Format time remaining
@@ -211,4 +213,14 @@ export function isTimeUrgent(expiresAt: string): boolean {
   const expires = new Date(expiresAt);
   const diff = expires.getTime() - now.getTime();
   return diff <= 60000 && diff > 0;
+}
+
+// Legacy function for backwards compatibility - now returns session token
+export function getParticipantId(): string {
+  const token = getSessionToken();
+  if (token) return token;
+  
+  // Fallback for edge cases (should not happen in normal flow)
+  console.warn('No session token found, session may be invalid');
+  return '';
 }
