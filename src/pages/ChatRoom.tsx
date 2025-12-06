@@ -7,7 +7,7 @@ import {
   sendMessage, 
   subscribeToMessages, 
   subscribeToRoom,
-  getParticipantId,
+  getSessionToken,
   formatTimeRemaining,
   isTimeUrgent,
   expireRoom
@@ -37,17 +37,24 @@ const ChatRoom = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const participantId = getParticipantId();
+  const sessionToken = getSessionToken();
 
   // Load room data
   useEffect(() => {
     const loadRoom = async () => {
       if (!code) return;
       
+      // Require valid session token
+      if (!sessionToken) {
+        toast.error("Session expired. Please rejoin the room.");
+        navigate('/');
+        return;
+      }
+      
       const roomData = await getRoomByCode(code);
       
       if (!roomData) {
-        toast.error("Room not found");
+        toast.error("Room not found or you don't have access");
         navigate('/');
         return;
       }
@@ -61,7 +68,7 @@ const ChatRoom = () => {
     };
 
     loadRoom();
-  }, [code, navigate]);
+  }, [code, navigate, sessionToken]);
 
   // Subscribe to messages
   useEffect(() => {
@@ -114,14 +121,14 @@ const ChatRoom = () => {
   }, [messages]);
 
   const handleSend = async () => {
-    if (!inputValue.trim() || !room || isSending) return;
+    if (!inputValue.trim() || !room || isSending || !sessionToken) return;
 
     setIsSending(true);
     const messageContent = inputValue.trim();
     setInputValue('');
 
     try {
-      await sendMessage(room.id, messageContent, participantId, 'text');
+      await sendMessage(room.id, messageContent, sessionToken, 'text');
     } catch (error) {
       toast.error("Failed to send message");
       setInputValue(messageContent);
@@ -172,8 +179,12 @@ const ChatRoom = () => {
 
       // Send as message
       try {
-        await sendMessage(room.id, '', participantId, 'image', imageData);
-        toast.success("Photo sent");
+        if (sessionToken) {
+          await sendMessage(room.id, '', sessionToken, 'image', imageData);
+          toast.success("Photo sent");
+        } else {
+          toast.error("Session expired");
+        }
       } catch {
         toast.error("Failed to send photo");
       }
@@ -273,7 +284,7 @@ const ChatRoom = () => {
           <MessageBubble
             key={message.id}
             message={message}
-            isOwn={message.sender_id === participantId}
+            isOwn={message.sender_id === sessionToken}
           />
         ))}
         <div ref={messagesEndRef} />

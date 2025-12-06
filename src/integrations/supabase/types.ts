@@ -52,6 +52,38 @@ export type Database = {
           },
         ]
       }
+      room_participants: {
+        Row: {
+          created_at: string
+          id: string
+          participant_number: number
+          room_id: string
+          session_token: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          participant_number: number
+          room_id: string
+          session_token: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          participant_number?: number
+          room_id?: string
+          session_token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_participants_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rooms: {
         Row: {
           code: string
@@ -88,6 +120,10 @@ export type Database = {
     }
     Functions: {
       cleanup_expired_rooms: { Args: never; Returns: undefined }
+      is_room_participant: {
+        Args: { p_room_id: string; p_session_token: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never

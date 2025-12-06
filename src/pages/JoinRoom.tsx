@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
-import { joinRoom, getParticipantId } from "@/lib/room";
+import { joinRoom } from "@/lib/room";
 import { toast } from "sonner";
 
 const JoinRoom = () => {
@@ -69,18 +69,15 @@ const JoinRoom = () => {
     setError(null);
 
     try {
-      // Ensure we have a participant ID
-      getParticipantId();
-      
+      // joinRoom now handles session token generation server-side
       const result = await joinRoom(roomCode);
       
       if (result.error) {
         setError(result.error);
         toast.error(result.error);
       } else if (result.room) {
-        // Store room info in session
+        // Store room info in session (session token is already stored by joinRoom)
         sessionStorage.setItem('currentRoomId', result.room.id);
-        sessionStorage.setItem('currentRoomCode', result.room.code);
         sessionStorage.setItem('isCreator', 'false');
         
         toast.success("Joining room...");

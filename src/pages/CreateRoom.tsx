@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Copy, Check, Clock, Loader2 } from "lucide-react";
-import { createRoom, getParticipantId } from "@/lib/room";
+import { createRoom, setStoredRoomCode } from "@/lib/room";
 import { toast } from "sonner";
 
 const DURATION_OPTIONS = [
@@ -23,16 +23,13 @@ const CreateRoom = () => {
   const handleCreate = async () => {
     setIsCreating(true);
     try {
-      // Ensure we have a participant ID
-      getParticipantId();
-      
+      // createRoom now handles session token generation server-side
       const room = await createRoom(duration);
       setRoomCode(room.code);
       setRoomId(room.id);
       
-      // Store room info in session
+      // Store room info in session (session token is already stored by createRoom)
       sessionStorage.setItem('currentRoomId', room.id);
-      sessionStorage.setItem('currentRoomCode', room.code);
       sessionStorage.setItem('isCreator', 'true');
     } catch (error) {
       toast.error("Failed to create room. Please try again.");
