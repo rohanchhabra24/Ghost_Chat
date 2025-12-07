@@ -22,7 +22,13 @@ interface GetRoomRequest {
   sessionToken: string;
 }
 
-type RoomRequest = CreateRoomRequest | JoinRoomRequest | GetRoomRequest;
+interface GetMessagesRequest {
+  action: 'getMessages';
+  roomId: string;
+  sessionToken: string;
+}
+
+type RoomRequest = CreateRoomRequest | JoinRoomRequest | GetRoomRequest | GetMessagesRequest;
 
 // Generate a random 6-character room code
 function generateRoomCode(): string {
@@ -263,6 +269,54 @@ serve(async (req) => {
           room,
           participantNumber: participant.participant_number
         }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // GET MESSAGES - secure message retrieval with session validation
+    if (body.action === 'getMessages') {
+      const { roomId, sessionToken } = body;
+      
+      if (!roomId || !sessionToken) {
+        return new Response(
+          JSON.stringify({ error: 'Missing roomId or session token' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Verify the session token is a participant of this room
+      const { data: participant, error: participantError } = await supabase
+        .from('room_participants')
+        .select()
+        .eq('room_id', roomId)
+        .eq('session_token', sessionToken)
+        .single();
+
+      if (participantError || !participant) {
+        console.log('Unauthorized message access attempt');
+        return new Response(
+          JSON.stringify({ error: 'Not authorized to access this room' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Fetch messages for the room
+      const { data: messages, error: messagesError } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('room_id', roomId)
+        .order('created_at', { ascending: true });
+
+      if (messagesError) {
+        console.error('Error fetching messages:', messagesError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to fetch messages' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ messages: messages || [] }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

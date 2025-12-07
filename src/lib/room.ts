@@ -132,7 +132,31 @@ export async function sendMessage(roomId: string, content: string, senderId: str
   return data;
 }
 
-// Subscribe to messages in a room
+// Get messages via edge function (secure)
+export async function getMessages(roomId: string) {
+  const sessionToken = getSessionToken();
+  
+  if (!sessionToken) {
+    return [];
+  }
+
+  const { data, error } = await supabase.functions.invoke('room-operations', {
+    body: {
+      action: 'getMessages',
+      roomId,
+      sessionToken,
+    },
+  });
+
+  if (error || data?.error) {
+    console.error('Error fetching messages:', error || data?.error);
+    return [];
+  }
+
+  return data.messages || [];
+}
+
+// Subscribe to messages in a room (realtime still works for new messages)
 export function subscribeToMessages(roomId: string, onMessage: (message: any) => void) {
   const channel = supabase
     .channel(`room-messages-${roomId}`)

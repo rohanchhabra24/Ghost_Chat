@@ -5,6 +5,7 @@ import { Send, Camera, Clock, Ghost, AlertTriangle } from "lucide-react";
 import { 
   getRoomByCode, 
   sendMessage, 
+  getMessages,
   subscribeToMessages, 
   subscribeToRoom,
   getSessionToken,
@@ -39,7 +40,7 @@ const ChatRoom = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sessionToken = getSessionToken();
 
-  // Load room data
+  // Load room data and initial messages
   useEffect(() => {
     const loadRoom = async () => {
       if (!code) return;
@@ -65,6 +66,10 @@ const ChatRoom = () => {
       }
 
       setRoom(roomData);
+      
+      // Load initial messages via secure edge function
+      const initialMessages = await getMessages(roomData.id);
+      setMessages(initialMessages);
     };
 
     loadRoom();
