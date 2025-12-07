@@ -130,23 +130,35 @@ serve(async (req) => {
 
     if (body.action === 'join') {
       const { code } = body as JoinRoomRequest;
+      console.log('Join request for code:', code);
       
       if (!code || code.length !== 6) {
+        console.log('Invalid code length:', code?.length);
         return new Response(
           JSON.stringify({ error: 'Invalid room code' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      // Find the room
+      // Find the room - use maybeSingle to handle no results gracefully
       const { data: room, error: findError } = await supabase
         .from('rooms')
-        .select()
+        .select('*')
         .eq('code', code.toUpperCase())
-        .single();
+        .maybeSingle();
 
-      if (findError || !room) {
-        console.log('Room not found:', code);
+      console.log('Room lookup result:', { room: room?.code, findError: findError?.message });
+
+      if (findError) {
+        console.error('Database error finding room:', findError);
+        return new Response(
+          JSON.stringify({ error: 'Database error' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (!room) {
+        console.log('Room not found for code:', code.toUpperCase());
         return new Response(
           JSON.stringify({ error: 'Room not found' }),
           { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
