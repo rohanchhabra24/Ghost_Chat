@@ -83,7 +83,7 @@ export async function joinRoom(code: string) {
 // Get room by code (requires valid session token)
 export async function getRoomByCode(code: string) {
   const sessionToken = getSessionToken();
-  
+
   if (!sessionToken) {
     return null;
   }
@@ -106,7 +106,7 @@ export async function getRoomByCode(code: string) {
 // Send a message (sender_id is now the session token for RLS validation)
 export async function sendMessage(roomId: string, content: string, senderId: string, type: 'text' | 'image' = 'text', imageUrl?: string) {
   const sessionToken = getSessionToken();
-  
+
   if (!sessionToken) {
     throw new Error('No valid session. Please rejoin the room.');
   }
@@ -137,7 +137,7 @@ export async function sendMessage(roomId: string, content: string, senderId: str
 // Get messages via edge function (secure)
 export async function getMessages(roomId: string) {
   const sessionToken = getSessionToken();
-  
+
   if (!sessionToken) {
     return [];
   }
@@ -214,7 +214,7 @@ export async function expireRoom(roomId: string) {
   if (error) {
     console.error('Error expiring room:', error);
   }
-  
+
   // Clear session on expiry
   clearSession();
 }
@@ -245,7 +245,7 @@ export function isTimeUrgent(expiresAt: string): boolean {
 export function getParticipantId(): string {
   const token = getSessionToken();
   if (token) return token;
-  
+
   // Fallback for edge cases (should not happen in normal flow)
   console.warn('No session token found, session may be invalid');
   return '';

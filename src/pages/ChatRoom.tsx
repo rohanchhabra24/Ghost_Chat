@@ -2,11 +2,11 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Send, Camera, Clock, Ghost, AlertTriangle } from "lucide-react";
-import { 
-  getRoomByCode, 
-  sendMessage, 
+import {
+  getRoomByCode,
+  sendMessage,
   getMessages,
-  subscribeToMessages, 
+  subscribeToMessages,
   subscribeToRoom,
   getSessionToken,
   formatTimeRemaining,
@@ -44,16 +44,16 @@ const ChatRoom = () => {
   useEffect(() => {
     const loadRoom = async () => {
       if (!code) return;
-      
+
       // Require valid session token
       if (!sessionToken) {
         toast.error("Session expired. Please rejoin the room.");
         navigate('/');
         return;
       }
-      
+
       const roomData = await getRoomByCode(code);
-      
+
       if (!roomData) {
         toast.error("Room not found or you don't have access");
         navigate('/');
@@ -66,7 +66,7 @@ const ChatRoom = () => {
       }
 
       setRoom(roomData);
-      
+
       // Load initial messages via secure edge function
       const initialMessages = await getMessages(roomData.id);
       setMessages(initialMessages);
@@ -77,18 +77,18 @@ const ChatRoom = () => {
 
   // Subscribe to messages
   useEffect(() => {
-    if (!room) return;
+    if (!room?.id) return;
 
     const unsubscribe = subscribeToMessages(room.id, (newMessage) => {
       setMessages((prev) => [...prev, newMessage]);
     });
 
     return () => unsubscribe();
-  }, [room]);
+  }, [room?.id]);
 
   // Subscribe to room status changes
   useEffect(() => {
-    if (!room) return;
+    if (!room?.id) return;
 
     const unsubscribe = subscribeToRoom(room.id, (updatedRoom) => {
       if (updatedRoom.status === 'expired') {
@@ -98,9 +98,9 @@ const ChatRoom = () => {
     });
 
     return () => unsubscribe();
-  }, [room]);
+  }, [room?.id]);
 
-  // Timer countdown
+  // Timer countdown and polling fallback for status
   useEffect(() => {
     if (!room || isExpired) return;
 
@@ -117,8 +117,22 @@ const ChatRoom = () => {
       }
     }, 1000);
 
-    return () => clearInterval(interval);
-  }, [room, isExpired]);
+    // Fallback polling for status change (Realtime rooms table RLS issue)
+    let pollInterval: any;
+    if (room.status === 'waiting') {
+      pollInterval = setInterval(async () => {
+        const roomData = await getRoomByCode(code!);
+        if (roomData && roomData.status !== 'waiting') {
+          setRoom(roomData);
+        }
+      }, 3000);
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [room?.id, room?.status, isExpired, code]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -142,7 +156,7 @@ const ChatRoom = () => {
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -152,8 +166,8 @@ const ChatRoom = () => {
   const startCamera = async () => {
     setShowCamera(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }
       });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -171,12 +185,12 @@ const ChatRoom = () => {
     const canvas = canvasRef.current;
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-    
+
     const ctx = canvas.getContext('2d');
     if (ctx) {
       ctx.drawImage(video, 0, 0);
       const imageData = canvas.toDataURL('image/jpeg', 0.8);
-      
+
       // Stop camera
       const stream = video.srcObject as MediaStream;
       stream?.getTracks().forEach(track => track.stop());
@@ -284,7 +298,7 @@ const ChatRoom = () => {
             </p>
           </div>
         )}
-        
+
         {messages.map((message) => (
           <MessageBubble
             key={message.id}
@@ -310,7 +324,7 @@ const ChatRoom = () => {
             <textarea
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              onKeyPress={handleKeyPress}
+              onKeyDown={handleKeyDown}
               placeholder="Type a message..."
               rows={1}
               className="w-full px-4 py-3 bg-secondary border border-border/50 rounded-xl resize-none focus:outline-none focus:border-primary/50 focus:shadow-ghost transition-all text-foreground placeholder:text-muted-foreground"
@@ -340,17 +354,17 @@ const MessageBubble = ({ message, isOwn }: { message: Message; isOwn: boolean })
       <div
         className={`
           max-w-[80%] rounded-2xl overflow-hidden
-          ${isOwn 
-            ? 'bg-primary text-primary-foreground rounded-br-md' 
+          ${isOwn
+            ? 'bg-primary text-primary-foreground rounded-br-md'
             : 'bg-secondary text-secondary-foreground rounded-bl-md'
           }
           ${isImage ? 'p-1' : 'px-4 py-2'}
         `}
       >
         {isImage && message.image_url ? (
-          <img 
-            src={message.image_url} 
-            alt="Shared photo" 
+          <img
+            src={message.image_url}
+            alt="Shared photo"
             className="max-w-full rounded-xl"
             style={{ maxHeight: '300px' }}
           />
