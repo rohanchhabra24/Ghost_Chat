@@ -105,31 +105,33 @@ export async function getRoomByCode(code: string) {
 
 // Send a message (sender_id is now the session token for RLS validation)
 export async function sendMessage(roomId: string, content: string, senderId: string, type: 'text' | 'image' = 'text', imageUrl?: string) {
-  // Use the session token as sender_id for RLS validation
   const sessionToken = getSessionToken();
   
   if (!sessionToken) {
     throw new Error('No valid session. Please rejoin the room.');
   }
 
-  const { data, error } = await supabase
-    .from('messages')
-    .insert({
-      room_id: roomId,
-      sender_id: sessionToken, // Use session token instead of client-generated ID
+  const { data, error } = await supabase.functions.invoke('room-operations', {
+    body: {
+      action: 'sendMessage',
+      roomId,
+      sessionToken,
       content: type === 'text' ? content : null,
-      image_url: type === 'image' ? imageUrl : null,
-      message_type: type,
-    })
-    .select()
-    .single();
+      messageType: type,
+      imageUrl: type === 'image' ? imageUrl : null,
+    },
+  });
 
   if (error) {
     console.error('Error sending message:', error);
     throw error;
   }
 
-  return data;
+  if (data?.error) {
+    throw new Error(data.error);
+  }
+
+  return data.message;
 }
 
 // Get messages via edge function (secure)
