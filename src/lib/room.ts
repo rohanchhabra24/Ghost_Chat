@@ -64,13 +64,44 @@ export async function joinRoom(code: string) {
     },
   });
 
-  if (error) {
-    console.error('Error joining room:', error);
-    return { error: error.message || 'Failed to join room' };
+  if (data?.error) {
+    return { error: data.error };
   }
 
-  if (data.error) {
-    return { error: data.error };
+  // Handle generic supabase-js function error if any
+  if (error) {
+    console.error('Supabase function error:', error);
+
+    // Attempt to extract the specific error message from any possible location
+    try {
+      // 1. Try context.reason (common in Newer Supabase JS)
+      if (error.context?.reason) {
+        const reason = typeof error.context.reason === 'string'
+          ? JSON.parse(error.context.reason)
+          : error.context.reason;
+        if (reason?.error) return { error: reason.error };
+      }
+
+      // 2. Try to parse message if it looks like JSON
+      if (error.message && error.message.includes('{')) {
+        const match = error.message.match(/\{.*\}/);
+        if (match) {
+          const parsed = JSON.parse(match[0]);
+          if (parsed.error) return { error: parsed.error };
+        }
+      }
+
+      // 3. Fallback for 400 errors from our Edge Function
+      if (error.status === 400 || error.message?.includes('non-2xx')) {
+        // We know our function returns JSON for 400 errors. 
+        // If we get here, it means we couldn't parse it, but we can provide a better fallback.
+        return { error: 'This room is either full or no longer available.' };
+      }
+    } catch (e) {
+      // Silent failure
+    }
+
+    return { error: error.message || 'Failed to join room' };
   }
 
   // Store the session token

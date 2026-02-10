@@ -20,7 +20,7 @@ const JoinRoom = () => {
   const handleInputChange = (index: number, value: string) => {
     // Only allow alphanumeric
     const cleanValue = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    
+
     if (cleanValue.length <= 1) {
       const newCode = [...code];
       newCode[index] = cleanValue;
@@ -39,7 +39,7 @@ const JoinRoom = () => {
     if (e.key === 'Backspace' && !code[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
-    
+
     // Submit on Enter if code is complete
     if (e.key === 'Enter' && code.every(c => c)) {
       handleJoin();
@@ -49,7 +49,7 @@ const JoinRoom = () => {
   const handlePaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
     const pastedText = e.clipboardData.getData('text').toUpperCase().replace(/[^A-Z0-9]/g, '');
-    
+
     if (pastedText.length >= 6) {
       const newCode = pastedText.slice(0, 6).split('');
       setCode(newCode);
@@ -59,7 +59,7 @@ const JoinRoom = () => {
 
   const handleJoin = async () => {
     const roomCode = code.join('');
-    
+
     if (roomCode.length !== 6) {
       setError('Please enter a complete 6-character code');
       return;
@@ -68,10 +68,18 @@ const JoinRoom = () => {
     setIsJoining(true);
     setError(null);
 
+    // If they already have a session for this specific room, just go there
+    const storedCode = sessionStorage.getItem('roomCode');
+    if (storedCode === roomCode) {
+      toast.success("Welcome back! Rejoining your session...");
+      navigate(`/chat/${roomCode}`);
+      return;
+    }
+
     try {
       // joinRoom now handles session token generation server-side
       const result = await joinRoom(roomCode);
-      
+
       if (result.error) {
         setError(result.error);
         toast.error(result.error);
@@ -79,8 +87,8 @@ const JoinRoom = () => {
         // Store room info in session (session token is already stored by joinRoom)
         sessionStorage.setItem('currentRoomId', result.room.id);
         sessionStorage.setItem('isCreator', 'false');
-        
-        toast.success("Joining room...");
+
+        toast.success("Joined successfully! Redirecting...");
         navigate(`/chat/${roomCode}`);
       }
     } catch {
@@ -97,7 +105,7 @@ const JoinRoom = () => {
     <div className="min-h-screen bg-gradient-dark relative overflow-hidden">
       {/* Background effects */}
       <div className="absolute inset-0 bg-gradient-radial opacity-30" />
-      
+
       <div className="relative z-10 min-h-screen flex flex-col px-6 py-8">
         {/* Header */}
         <Link to="/" className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors mb-8">

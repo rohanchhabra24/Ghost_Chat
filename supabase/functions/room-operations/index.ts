@@ -65,7 +65,7 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    
+
     // Use service role to bypass RLS
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -74,7 +74,7 @@ serve(async (req) => {
 
     if (body.action === 'create') {
       const { durationMinutes } = body as CreateRoomRequest;
-      
+
       if (!durationMinutes || durationMinutes < 1 || durationMinutes > 120) {
         return new Response(
           JSON.stringify({ error: 'Invalid duration. Must be between 1 and 120 minutes.' }),
@@ -128,8 +128,8 @@ serve(async (req) => {
 
       console.log('Room created successfully:', room.code);
       return new Response(
-        JSON.stringify({ 
-          room, 
+        JSON.stringify({
+          room,
           sessionToken,
           participantNumber: 1
         }),
@@ -140,7 +140,7 @@ serve(async (req) => {
     if (body.action === 'join') {
       const { code } = body as JoinRoomRequest;
       console.log('Join request for code:', code);
-      
+
       if (!code || code.length !== 6) {
         console.log('Invalid code length:', code?.length);
         return new Response(
@@ -161,7 +161,7 @@ serve(async (req) => {
       if (findError) {
         console.error('Database error finding room:', findError);
         return new Response(
-          JSON.stringify({ error: 'Database error' }),
+          JSON.stringify({ error: 'There was a problem checking the room status. Please try again.' }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -210,8 +210,15 @@ serve(async (req) => {
 
       if (participantError) {
         console.error('Error registering participant:', participantError);
+        // Specifically check for unique constraint violations which mean the room is full
+        if (participantError.code === '23505') {
+          return new Response(
+            JSON.stringify({ error: 'This room is already full and cannot accept more participants.' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
         return new Response(
-          JSON.stringify({ error: 'Failed to join room. It may be full.' }),
+          JSON.stringify({ error: 'Failed to join room. It may be full or no longer available.' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -237,8 +244,8 @@ serve(async (req) => {
 
       console.log('Joined room successfully:', room.code);
       return new Response(
-        JSON.stringify({ 
-          room: updatedRoom, 
+        JSON.stringify({
+          room: updatedRoom,
           sessionToken,
           participantNumber: 2
         }),
@@ -248,7 +255,7 @@ serve(async (req) => {
 
     if (body.action === 'get') {
       const { code, sessionToken } = body as GetRoomRequest;
-      
+
       if (!code || !sessionToken) {
         return new Response(
           JSON.stringify({ error: 'Missing code or session token' }),
@@ -286,7 +293,7 @@ serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           room,
           participantNumber: participant.participant_number
         }),
@@ -297,7 +304,7 @@ serve(async (req) => {
     // GET MESSAGES - secure message retrieval with session validation
     if (body.action === 'getMessages') {
       const { roomId, sessionToken } = body;
-      
+
       if (!roomId || !sessionToken) {
         return new Response(
           JSON.stringify({ error: 'Missing roomId or session token' }),
@@ -345,7 +352,7 @@ serve(async (req) => {
     // SEND MESSAGE - secure message sending with session validation
     if (body.action === 'sendMessage') {
       const { roomId, sessionToken, content, messageType, imageUrl } = body as SendMessageRequest;
-      
+
       if (!roomId || !sessionToken) {
         return new Response(
           JSON.stringify({ error: 'Missing roomId or session token' }),
