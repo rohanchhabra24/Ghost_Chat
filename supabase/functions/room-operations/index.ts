@@ -28,7 +28,16 @@ interface GetMessagesRequest {
   sessionToken: string;
 }
 
-type RoomRequest = CreateRoomRequest | JoinRoomRequest | GetRoomRequest | GetMessagesRequest;
+interface SendMessageRequest {
+  action: 'sendMessage';
+  roomId: string;
+  sessionToken: string;
+  content: string | null;
+  messageType: 'text' | 'image';
+  imageUrl?: string | null;
+}
+
+type RoomRequest = CreateRoomRequest | JoinRoomRequest | GetRoomRequest | GetMessagesRequest | SendMessageRequest;
 
 // Generate a random 6-character room code
 function generateRoomCode(): string {
@@ -329,6 +338,59 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({ messages: messages || [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // SEND MESSAGE - secure message sending with session validation
+    if (body.action === 'sendMessage') {
+      const { roomId, sessionToken, content, messageType, imageUrl } = body as SendMessageRequest;
+      
+      if (!roomId || !sessionToken) {
+        return new Response(
+          JSON.stringify({ error: 'Missing roomId or session token' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Verify the session token is a participant of this room
+      const { data: participant, error: participantError } = await supabase
+        .from('room_participants')
+        .select()
+        .eq('room_id', roomId)
+        .eq('session_token', sessionToken)
+        .single();
+
+      if (participantError || !participant) {
+        return new Response(
+          JSON.stringify({ error: 'Not authorized to send messages in this room' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Insert the message
+      const { data: message, error: messageError } = await supabase
+        .from('messages')
+        .insert({
+          room_id: roomId,
+          sender_id: sessionToken,
+          content: messageType === 'text' ? content : null,
+          image_url: messageType === 'image' ? imageUrl : null,
+          message_type: messageType,
+        })
+        .select()
+        .single();
+
+      if (messageError) {
+        console.error('Error sending message:', messageError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to send message' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ message }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
