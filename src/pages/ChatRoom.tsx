@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Send, Camera, Clock, Ghost, AlertTriangle } from "lucide-react";
+import { Send, Camera, Clock, Ghost, AlertTriangle, DollarSign } from "lucide-react";
 import {
   getRoomByCode,
   sendMessage,
@@ -14,16 +14,27 @@ import {
   expireRoom
 } from "@/lib/room";
 import { encryptMessage, decryptMessage } from "@/lib/crypto";
+import { WalletButton } from "@/components/WalletButton";
+import { SendCryptoModal } from "@/components/SendCryptoModal";
+import { PaymentMessage } from "@/components/PaymentMessage";
+import { isWalletConnected, getWalletAddress } from "@/lib/wallet";
 import { toast } from "sonner";
+
 
 interface Message {
   id: string;
   sender_id: string;
   content: string | null;
   image_url: string | null;
-  message_type: 'text' | 'image';
+  message_type: 'text' | 'image' | 'payment_request' | 'payment_sent';
   created_at: string;
+  // Payment-specific fields
+  payment_amount?: string;
+  payment_token?: 'MATIC' | 'ETH' | 'USDC';
+  payment_to?: string;
+  payment_tx_hash?: string;
 }
+
 
 const ChatRoom = () => {
   const { code } = useParams<{ code: string }>();
@@ -37,6 +48,8 @@ const ChatRoom = () => {
   const [isExpired, setIsExpired] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [isWindowFocused, setIsWindowFocused] = useState(true);
+  const [showSendCrypto, setShowSendCrypto] = useState(false);
+  const [peerWalletAddress, setPeerWalletAddress] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -272,6 +285,41 @@ const ChatRoom = () => {
     setShowCamera(false);
   };
 
+  // Payment handlers
+  const handleSendCryptoClick = async () => {
+    if (!isWalletConnected()) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+    setShowSendCrypto(true);
+  };
+
+  const handlePaymentSuccess = async (txHash: string, amount: string, token: string) => {
+    if (!room || !sessionToken || !code) return;
+
+    try {
+      const recipientAddr = peerWalletAddress || await getWalletAddress();
+
+      // Create payment message
+      const paymentData = {
+        type: 'payment_sent',
+        amount,
+        token,
+        txHash,
+        recipientAddress: recipientAddr
+      };
+
+      // Encrypt and send payment message
+      const encryptedPayment = await encryptMessage(JSON.stringify(paymentData), code);
+      await sendMessage(room.id, encryptedPayment, sessionToken, 'payment_sent');
+
+      toast.success('Payment sent successfully!');
+    } catch (error) {
+      console.error('Failed to send payment message:', error);
+      toast.error('Payment sent but failed to notify in chat');
+    }
+  };
+
   // Expired state
   if (isExpired) {
     return (
@@ -340,9 +388,12 @@ const ChatRoom = () => {
             <Ghost className="w-5 h-5 text-primary" />
             <span className="font-mono text-sm text-muted-foreground">{code}</span>
           </div>
-          <div className={`flex items-center gap-2 font-mono text-sm ${isUrgent ? 'timer-urgent' : 'text-foreground'}`}>
-            <Clock className="w-4 h-4" />
-            {timeRemaining}
+          <div className="flex items-center gap-3">
+            <div className={`flex items-center gap-2 font-mono text-sm ${isUrgent ? 'timer-urgent' : 'text-foreground'}`}>
+              <Clock className="w-4 h-4" />
+              {timeRemaining}
+            </div>
+            <WalletButton />
           </div>
         </div>
         {room.status === 'waiting' && (
@@ -364,15 +415,48 @@ const ChatRoom = () => {
           </div>
         )}
 
-        {messages.map((message) => (
-          <MessageBubble
-            key={message.id}
-            message={message}
-            isOwn={message.sender_id === sessionToken}
-          />
-        ))}
+        {messages.map((message) => {
+          if (message.message_type === 'payment_sent' || message.message_type === 'payment_request') {
+            // Parse content if it's a JSON string (for backward compatibility or direct usage)
+            let paymentData: any = {};
+            try {
+              paymentData = typeof message.content === 'string' && message.content.startsWith('{')
+                ? JSON.parse(message.content)
+                : {};
+            } catch (e) {
+              // content might not be JSON if it's legacy or error
+            }
+
+            return (
+              <PaymentMessage
+                key={message.id}
+                type={message.message_type as any}
+                amount={message.payment_amount || paymentData.amount || '0'}
+                token={message.payment_token || paymentData.token || 'MATIC'}
+                txHash={message.payment_tx_hash || paymentData.txHash}
+                recipientAddress={message.payment_to || paymentData.recipientAddress}
+                isSender={message.sender_id === sessionToken}
+              />
+            );
+          }
+
+          return (
+            <MessageBubble
+              key={message.id}
+              message={message}
+              isOwn={message.sender_id === sessionToken}
+            />
+          );
+        })}
         <div ref={messagesEndRef} />
       </div>
+
+      <SendCryptoModal
+        open={showSendCrypto}
+        onClose={() => setShowSendCrypto(false)}
+        recipientAddress={peerWalletAddress || undefined}
+        onSuccess={handlePaymentSuccess}
+      />
 
       {/* Input */}
       <div className="flex-shrink-0 p-4 border-t border-border/50 bg-surface/60 backdrop-blur-xl">
@@ -384,6 +468,14 @@ const ChatRoom = () => {
             className="flex-shrink-0"
           >
             <Camera className="w-5 h-5" />
+          </Button>
+          <Button
+            variant="glass"
+            size="icon"
+            onClick={handleSendCryptoClick}
+            className="flex-shrink-0 text-primary hover:text-primary/80"
+          >
+            <DollarSign className="w-5 h-5" />
           </Button>
           <div className="flex-1 relative">
             <textarea

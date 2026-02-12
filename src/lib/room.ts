@@ -153,7 +153,7 @@ export async function getRoomByCode(code: string) {
 }
 
 // Send a message (sender_id is now the session token for RLS validation)
-export async function sendMessage(roomId: string, content: string, senderId: string, type: 'text' | 'image' = 'text', imageUrl?: string) {
+export async function sendMessage(roomId: string, content: string, senderId: string, type: 'text' | 'image' | 'payment_request' | 'payment_sent' = 'text', imageUrl?: string) {
   const sessionToken = getSessionToken();
 
   if (!sessionToken) {

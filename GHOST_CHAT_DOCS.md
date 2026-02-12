@@ -311,3 +311,27 @@ Ghost Chat relies on the Supabase Realtime engine for instant delivery.
 
 
 
+
+## 13 – CRYPTO INTEGRATION
+
+### 13.1 Overview
+Ghost Chat includes a privacy-preserving crypto wallet integration allowing users to send and receive real cryptocurrency (MATIC/ETH) directly within the chat.
+
+### 13.2 Wallet Support
+- **External Wallets**: Supports MetaMask, Phantom, and other WalletConnect-compatible wallets for mainnet interactions.
+- **Ephemeral Wallets ("Burner Wallets")**:
+  - In-browser generated wallets for users without extensions.
+  - Keys stored in `sessionStorage` (cleared on tab close/room expiry).
+  - "Privacy Mode": Users can burn the wallet to permanently destroy keys and history.
+
+### 13.3 Payment Flow
+1. **Connect**: User A connects wallet (or generates burner).
+2. **Signal**: Wallet address is shared via encrypted system message to User B.
+3. **Send**: User B clicks "Send Crypto", enters amount.
+4. **Sign**: User B signs transaction on Polygon or Base Mainnet.
+5. **Verify**: Transaction hash is sent to chat; User A verifies on block explorer.
+
+### 13.4 Security Model
+- **Client-Side Only**: Private keys never touch the server.
+- **No Indexing**: Wallet addresses are not stored in the database, only relayed via E2EE messages.
+- **Mainnet Only**: Configured for Polygon (137) and Base (8453) mainnets for real value transfer.
