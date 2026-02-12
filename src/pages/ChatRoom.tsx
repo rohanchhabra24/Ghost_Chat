@@ -13,6 +13,7 @@ import {
   isTimeUrgent,
   expireRoom
 } from "@/lib/room";
+import { encryptMessage, decryptMessage } from "@/lib/crypto";
 import { toast } from "sonner";
 
 interface Message {
@@ -35,6 +36,7 @@ const ChatRoom = () => {
   const [isUrgent, setIsUrgent] = useState(false);
   const [isExpired, setIsExpired] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
+  const [isWindowFocused, setIsWindowFocused] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -47,7 +49,7 @@ const ChatRoom = () => {
 
       // Require valid session token
       if (!sessionToken) {
-        toast.error("Session expired. Please rejoin the room.");
+        toast.error("Session not found. This room requires a fresh join.");
         navigate('/');
         return;
       }
@@ -67,9 +69,14 @@ const ChatRoom = () => {
 
       setRoom(roomData);
 
-      // Load initial messages via secure edge function
+      // Load and decrypt initial messages
       const initialMessages = await getMessages(roomData.id);
-      setMessages(initialMessages);
+      const decryptedMessages = await Promise.all(initialMessages.map(async (m: any) => ({
+        ...m,
+        content: m.content ? await decryptMessage(m.content, code) : m.content,
+        image_url: (m.message_type === 'image' && m.image_url) ? await decryptMessage(m.image_url, code) : m.image_url
+      })));
+      setMessages(decryptedMessages);
     };
 
     loadRoom();
@@ -77,14 +84,22 @@ const ChatRoom = () => {
 
   // Subscribe to messages
   useEffect(() => {
-    if (!room?.id) return;
+    if (!room?.id || !code) return;
 
-    const unsubscribe = subscribeToMessages(room.id, (newMessage) => {
+    const unsubscribe = subscribeToMessages(room.id, async (newMessage) => {
+      // Decrypt message content if it exists
+      if (newMessage.content) {
+        newMessage.content = await decryptMessage(newMessage.content, code);
+      }
+      // Decrypt image_url if it's an image message (it contains the encrypted data URL)
+      if (newMessage.message_type === 'image' && newMessage.image_url) {
+        newMessage.image_url = await decryptMessage(newMessage.image_url, code);
+      }
       setMessages((prev) => [...prev, newMessage]);
     });
 
     return () => unsubscribe();
-  }, [room?.id]);
+  }, [room?.id, code]);
 
   // Subscribe to room status changes
   useEffect(() => {
@@ -134,6 +149,43 @@ const ChatRoom = () => {
     };
   }, [room?.id, room?.status, isExpired, code]);
 
+  // Handle window focus/blur for privacy (best effort screenshot/glance protection)
+  useEffect(() => {
+    const handleFocus = () => setIsWindowFocused(true);
+    const handleBlur = () => setIsWindowFocused(false);
+
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('blur', handleBlur);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, []);
+
+  // Decrypt initial messages
+  useEffect(() => {
+    const decryptInitial = async () => {
+      if (messages.length > 0 && code && messages.some(m => m.content?.startsWith('W'))) { // Simple heuristic to avoid re-decrypting
+        const decrypted = await Promise.all(messages.map(async m => {
+          if (m.content && m.content.includes('==') || m.content?.length > 20) { // Very basic check for base64
+            // We actually need to know if it's encrypted. 
+            // For now we'll just decrypt everything that looks like it needs it.
+            return {
+              ...m,
+              content: m.content ? await decryptMessage(m.content, code) : m.content,
+              image_url: (m.message_type === 'image' && m.image_url) ? await decryptMessage(m.image_url, code) : m.image_url
+            };
+          }
+          return m;
+        }));
+        // setMessages(decrypted); // Careful with infinite loops here
+      }
+    };
+    // This is handled better by ensuring getMessages returns decrypted data or 
+    // decrypting right after fetch.
+  }, [messages.length, code]);
+
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -147,7 +199,8 @@ const ChatRoom = () => {
     setInputValue('');
 
     try {
-      await sendMessage(room.id, messageContent, sessionToken, 'text');
+      const encryptedContent = await encryptMessage(messageContent, code!);
+      await sendMessage(room.id, encryptedContent, sessionToken, 'text');
     } catch (error) {
       toast.error("Failed to send message");
       setInputValue(messageContent);
@@ -198,8 +251,9 @@ const ChatRoom = () => {
 
       // Send as message
       try {
-        if (sessionToken) {
-          await sendMessage(room.id, '', sessionToken, 'image', imageData);
+        if (sessionToken && code) {
+          const encryptedImage = await encryptMessage(imageData, code);
+          await sendMessage(room.id, '', sessionToken, 'image', encryptedImage);
           toast.success("Photo sent");
         } else {
           toast.error("Session expired");
@@ -248,7 +302,18 @@ const ChatRoom = () => {
   }
 
   return (
-    <div className="h-screen bg-gradient-dark flex flex-col relative">
+    <div className={`h-screen bg-gradient-dark flex flex-col relative transition-all duration-500 ${!isWindowFocused ? 'blur-xl grayscale' : ''}`}>
+      {/* Privacy overlay */}
+      {!isWindowFocused && (
+        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-background/20 backdrop-blur-md">
+          <div className="text-center p-6 rounded-2xl bg-surface/80 border border-border/50 shadow-2xl scale-in">
+            <Ghost className="w-12 h-12 text-primary mx-auto mb-4 animate-pulse" />
+            <h2 className="text-xl font-bold text-foreground mb-1">Privacy Mode</h2>
+            <p className="text-muted-foreground text-sm">Click anywhere to resume chat</p>
+          </div>
+        </div>
+      )}
+
       {/* Camera overlay */}
       {showCamera && (
         <div className="absolute inset-0 z-50 bg-background flex flex-col">

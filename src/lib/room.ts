@@ -30,6 +30,24 @@ export function setStoredRoomCode(code: string): void {
   sessionStorage.setItem(ROOM_CODE_KEY, code);
 }
 
+// Register cleanup to clear session on page unload (enforces one-time room access)
+export function registerSessionCleanup(): void {
+  const cleanup = () => {
+    clearSession();
+  };
+
+  // Clear session when user closes tab, refreshes, or navigates away
+  window.addEventListener('beforeunload', cleanup);
+  window.addEventListener('pagehide', cleanup);
+
+  // Also clear on visibility change (mobile browsers)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      cleanup();
+    }
+  });
+}
+
 // Create a new room via edge function
 export async function createRoom(durationMinutes: number) {
   const { data, error } = await supabase.functions.invoke('room-operations', {

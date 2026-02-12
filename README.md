@@ -1,73 +1,106 @@
-# Welcome to your Lovable project
+# Ghost Chat
 
-## Project info
+**Privacy-first, self-destructing chat application**
 
-**URL**: https://lovable.dev/projects/0a96e8f2-3da2-4236-ad09-5d46915d001e
+## About
 
-## How can I edit this code?
+Ghost Chat is an ephemeral messaging platform that prioritizes privacy and leaves zero digital footprint. No accounts, no history, no identity—just secure, temporary conversations.
 
-There are several ways of editing your application.
+### Key Features
 
-**Use Lovable**
+- **End-to-End Encryption**: All messages encrypted client-side using AES-GCM
+- **Self-Destructing**: Rooms automatically expire after user-defined duration (up to 3 hours)
+- **Anonymous**: No accounts, phone numbers, or personal data collection
+- **Privacy Mode**: Automatic blur protection when window loses focus
+- **Camera-Only Photos**: Live capture only, no gallery access
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/0a96e8f2-3da2-4236-ad09-5d46915d001e) and start prompting.
+## Tech Stack
 
-Changes made via Lovable will be committed automatically to this repo.
+- **Frontend**: React + TypeScript + Vite
+- **Styling**: Tailwind CSS + shadcn/ui
+- **Backend**: Supabase (Edge Functions + PostgreSQL + Realtime)
+- **Encryption**: Web Crypto API
+- **Hosting**: Vercel (Frontend) + Supabase (Backend)
 
-**Use your preferred IDE**
+## Getting Started
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Prerequisites
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+- Node.js 18+ and npm
+- Supabase account (for backend)
 
-Follow these steps:
+### Installation
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
+# Clone the repository
 git clone <YOUR_GIT_URL>
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Navigate to project directory
+cd ghost-chat
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Install dependencies
+npm install
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Set up environment variables
+cp .env.example .env.local
+# Add your Supabase credentials to .env.local
+
+# Start development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### Environment Variables
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Create a `.env.local` file with:
 
-**Use GitHub Codespaces**
+```
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_PUBLISHABLE_KEY=your_supabase_anon_key
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Development
 
-## What technologies are used for this project?
+```sh
+# Run development server
+npm run dev
 
-This project is built with:
+# Build for production
+npm run build
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+# Preview production build
+npm run preview
 
-## How can I deploy this project?
+# Lint code
+npm run lint
+```
 
-Simply open [Lovable](https://lovable.dev/projects/0a96e8f2-3da2-4236-ad09-5d46915d001e) and click on Share -> Publish.
+## Deployment
 
-## Can I connect a custom domain to my Lovable project?
+### Frontend (Vercel)
 
-Yes, you can!
+1. Connect your GitHub repository to Vercel
+2. Add environment variables in Vercel dashboard
+3. Deploy automatically on push to main branch
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+### Backend (Supabase)
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+```sh
+# Deploy edge functions
+supabase functions deploy room-operations
+
+# Run migrations
+supabase db push
+```
+
+## Documentation
+
+See [GHOST_CHAT_DOCS.md](./GHOST_CHAT_DOCS.md) for comprehensive technical documentation including:
+- System architecture
+- Database schema
+- API specifications
+- Security & compliance details
+- Performance requirements
+
+## License
+
+MIT
